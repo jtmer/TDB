@@ -340,26 +340,40 @@ RC Table::create_index(Trx *trx, std::vector<const FieldMeta *> &multi_field_met
 
 RC Table::insert_record(Record &record)
 {
-  RC rc = RC::SUCCESS;
-  rc = record_handler_->insert_record(record.data(), table_meta_.record_size(), &record.rid());
-  if (rc != RC::SUCCESS) {
-    LOG_ERROR("Insert record failed. table name=%s, rc=%s", table_meta_.name(), strrc(rc));
+    RC rc = RC::SUCCESS;
+    rc = record_handler_->insert_record(record.data(), table_meta_.record_size(), &record.rid());
+    if (rc != RC::SUCCESS) {
+        LOG_ERROR("Insert record failed. table name=%s, rc=%s", table_meta_.name(), strrc(rc));
+        return rc;
+    }
+
+    // TODO [Lab2] 增加索引的处理逻辑
+    for (Index *index : indexes_) {
+        rc = index->insert_entry(record.data(), &record.rid());
+        if (rc != RC::SUCCESS) {
+            LOG_ERROR("Failed to insert record into index. table=%s, index=%s, rc=%d:%s",
+                      name(), index->index_meta().name(), rc, strrc(rc));
+        }
+    }
+
     return rc;
-  }
-
-  // TODO [Lab2] 增加索引的处理逻辑
-
-  return rc;
 }
 
 RC Table::delete_record(const Record &record)
 {
-  RC rc = RC::SUCCESS;
+    RC rc = RC::SUCCESS;
 
-  // TODO [Lab2] 增加索引的处理逻辑
+    // TODO [Lab2] 增加索引的处理逻辑
+      for (Index *index : indexes_) {
+        rc = index->delete_entry(record.data(), &record.rid());
+        if (rc != RC::SUCCESS) {
+        LOG_ERROR("Failed to delete record from index. table=%s, index=%s, rc=%d:%s",
+                    name(), index->index_meta().name(), rc, strrc(rc));
+        }
+    }
 
-  rc = record_handler_->delete_record(&record.rid());
-  return rc;
+    rc = record_handler_->delete_record(&record.rid());
+    return rc;
 }
 
 RC Table::visit_record(const RID &rid, bool readonly, std::function<void(Record &)> visitor)

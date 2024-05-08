@@ -26,6 +26,11 @@
 #include "include/query_engine/planner/operator/group_by_physical_operator.h"
 #include "common/log/log.h"
 #include "include/storage_engine/recorder/table.h"
+#include "include/query_engine/structor/expression/comparison_expression.h"
+#include "include/query_engine/structor/expression/field_expression.h"
+#include "include/query_engine/structor/expression/value_expression.h"
+#include "include/storage_engine/index/index.h"
+#include "include/query_engine/planner/operator/index_scan_physical_operator.h"
 
 using namespace std;
 
@@ -87,10 +92,11 @@ RC PhysicalOperatorGenerator::create_plan(
 {
   vector<unique_ptr<Expression>> &predicates = table_get_oper.predicates();
   Index *index = nullptr;
+  Value value;
   // TODO [Lab2] 生成IndexScanOperator的准备工作,主要包含:
   // 1. 通过predicates获取具体的值表达式， 目前应该只支持等值表达式的索引查找
     // example:
-    //  if(predicate.type == ExprType::COMPARE){
+    //  if(predicate.type == ExprType::COMPARISON){
     //   auto compare_expr = dynamic_cast<ComparisonExpr*>(predicate.get());
     //   if(compare_expr->comp != EQUAL_TO) continue;
     //   [process]
@@ -98,23 +104,53 @@ RC PhysicalOperatorGenerator::create_plan(
   // 2. 对应上面example里的process阶段， 找到等值表达式中对应的FieldExpression和ValueExpression(左值和右值)
   // 通过FieldExpression找到对应的Index, 通过ValueExpression找到对应的Value
 
-  if(index == nullptr){
-    Table *table = table_get_oper.table();
-    auto table_scan_oper = new TableScanPhysicalOperator(table, table_get_oper.table_alias(), table_get_oper.readonly());
-    table_scan_oper->isdelete_ = is_delete;
-    table_scan_oper->set_predicates(std::move(predicates));
-    oper = unique_ptr<PhysicalOperator>(table_scan_oper);
-    LOG_TRACE("use table scan");
-  }else{
-    // TODO [Lab2] 生成IndexScanOperator, 并放置在算子树上，下面是一个实现参考，具体实现可以根据需要进行修改
-    // IndexScanner 在设计时，考虑了范围查找索引的情况，但此处我们只需要考虑单个键的情况
-    // const Value &value = value_expression->get_value();
-    // IndexScanPhysicalOperator *operator =
-    //              new IndexScanPhysicalOperator(table, index, readonly, &value, true, &value, true);
-    // oper = unique_ptr<PhysicalOperator>(operator);
-  }
+    for (auto &predicate : predicates) {
+        if (predicate->type() == ExprType::COMPARISON) {
+            auto compare_expr = dynamic_cast<ComparisonExpr *>(predicate.get());
+            if (compare_expr->comp() != EQUAL_TO) {
+                continue;
+            }
 
-  return RC::SUCCESS;
+            auto fieldExpression = compare_expr->left().get();
+            auto ValueExpression = compare_expr->right().get();
+            if (fieldExpression->type() == ExprType::FIELD && ValueExpression->type() == ExprType::VALUE) {
+                auto field_expr = dynamic_cast<FieldExpr *>(fieldExpression);
+                auto value_expr = dynamic_cast<ValueExpr *>(ValueExpression);
+                if (field_expr->table_name() == table_get_oper.table_alias()) {
+                    auto table = table_get_oper.table();
+                    index = table->find_index_by_field(field_expr->field_name());
+                    value = value_expr->get_value();
+                    if (index != nullptr) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+
+    if(index == nullptr){
+        Table *table = table_get_oper.table();
+        auto table_scan_oper = new TableScanPhysicalOperator(table, table_get_oper.table_alias(), table_get_oper.readonly());
+        table_scan_oper->isdelete_ = is_delete;
+        table_scan_oper->set_predicates(std::move(predicates));
+        oper = unique_ptr<PhysicalOperator>(table_scan_oper);
+        LOG_TRACE("use table scan");
+        // std::cout<<"[use table scan]"<<std::endl;
+    } else {
+        // TODO [Lab2] 生成IndexScanOperator, 并放置在算子树上，下面是一个实现参考，具体实现可以根据需要进行修改
+        // IndexScanner 在设计时，考虑了范围查找索引的情况，但此处我们只需要考虑单个键的情况
+        // const Value &value = value_expression->get_value();
+        // IndexScanPhysicalOperator *operator =
+        //              new IndexScanPhysicalOperator(table, index, readonly, &value, true, &value, true);
+        // oper = unique_ptr<PhysicalOperator>(operator);
+        Table *table = table_get_oper.table();
+        IndexScanPhysicalOperator *indexScanner = new IndexScanPhysicalOperator(table, index, table_get_oper.readonly(), &value, true, &value, true);
+        oper = unique_ptr<PhysicalOperator>(indexScanner);
+        // std::cout<<"[use index scan]"<<std::endl;
+    }
+
+    return RC::SUCCESS;
 }
 
 RC PhysicalOperatorGenerator::create_plan(

@@ -90,8 +90,33 @@ RC BplusTreeIndex::close()
  */
 RC BplusTreeIndex::insert_entry(const char *record, const RID *rid)
 {
-  // TODO [Lab2] 增加索引项的处理逻辑
-  return RC::SUCCESS;
+    // TODO [Lab2] 增加索引项的处理逻辑
+    int meta_size = multi_field_metas_.size();
+    vector<string> keys;
+    for(int i = 0; i < meta_size; i++){
+        std::string key(record + multi_field_metas_[i].offset(), multi_field_metas_[i].len());
+        keys.push_back(key);
+    }
+    char** keys_array = new char*[keys.size()];
+    for(int i = 0; i < keys.size(); i++){
+        keys_array[i] = (char*)keys[i].c_str();
+    }
+    const char** keys_array_const = (const char**)keys_array;
+
+    // 判断是否Unique
+    list<RID> rids;
+    if(index_meta_.is_unique()){
+        if(index_handler_.get_entry(keys_array_const, rids, meta_size) == RC::SUCCESS){
+            return RC::RECORD_DUPLICATE_KEY;
+        }
+    }
+
+    RC rc = index_handler_.insert_entry(keys_array_const, rid, meta_size);
+    if(rc != RC::SUCCESS){
+        LOG_WARN("failed to insert entry. rc=%d:%s", rc, strrc(rc));
+    }
+
+    return rc;
 }
 
 /**
@@ -100,8 +125,25 @@ RC BplusTreeIndex::insert_entry(const char *record, const RID *rid)
  */
 RC BplusTreeIndex::delete_entry(const char *record, const RID *rid)
 {
-  // TODO [Lab2] 增加索引项的处理逻辑
-  return RC::SUCCESS;
+    // TODO [Lab2] 增加索引项的处理逻辑
+    int meta_size = multi_field_metas_.size();
+    vector<string> keys;
+    for(int i = 0; i < meta_size; i++){
+        std::string key(record + multi_field_metas_[i].offset(), multi_field_metas_[i].len());
+        keys.push_back(key);
+    }
+    char** keys_array = new char*[keys.size()];
+    for(int i = 0; i < keys.size(); i++){
+        keys_array[i] = (char*)keys[i].c_str();
+    }
+
+    const char** keys_array_const = (const char**)keys_array;
+    RC rc = index_handler_.delete_entry(keys_array_const, rid, meta_size);
+    if(rc != RC::SUCCESS){
+        LOG_WARN("failed to delete entry. rc=%d:%s", rc, strrc(rc));
+    }
+
+    return rc;
 }
 
 IndexScanner *BplusTreeIndex::create_scanner(
