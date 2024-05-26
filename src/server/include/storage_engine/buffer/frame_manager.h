@@ -52,6 +52,12 @@ public:
   */
  int evict_frames(int count, std::function<RC(Frame *frame)> evict_action);
 
+    RC evict_frame(Frame *frame) {
+        frames_.remove(frame->frame_id());
+        allocator_.free(frame);
+        return RC::SUCCESS;
+    }
+
  /**
   * @brief 列出所有指定文件的页面
   * @param file_desc 文件描述符

@@ -31,6 +31,7 @@
 #include "include/query_engine/structor/expression/value_expression.h"
 #include "include/storage_engine/index/index.h"
 #include "include/query_engine/planner/operator/index_scan_physical_operator.h"
+#include "include/query_engine/planner/operator/join_physical_operator.h"
 
 using namespace std;
 
@@ -73,7 +74,10 @@ RC PhysicalOperatorGenerator::create(LogicalNode &logical_operator, unique_ptr<P
       return create_plan(static_cast<ExplainLogicalNode &>(logical_operator), oper, is_delete);
     }
     // TODO [Lab3] 实现JoinNode到JoinOperator的转换
-    case LogicalNodeType::JOIN:
+    case LogicalNodeType::JOIN:  {
+      return create_plan(static_cast<JoinLogicalNode &>(logical_operator), oper);
+    }
+
     case LogicalNodeType::GROUP_BY: {
       return RC::UNIMPLENMENT;
     }
@@ -356,5 +360,34 @@ RC PhysicalOperatorGenerator::create_plan(
 RC PhysicalOperatorGenerator::create_plan(
     JoinLogicalNode &join_oper, unique_ptr<PhysicalOperator> &oper)
 {
-  return RC::UNIMPLENMENT;
+    vector<unique_ptr<LogicalNode>> &child_opers = join_oper.children();
+    unique_ptr<PhysicalOperator> left_physical_oper;
+    unique_ptr<PhysicalOperator> right_physical_oper;
+    RC rc = RC::UNIMPLENMENT;
+
+    if (child_opers.size() != 2) {
+        LOG_WARN("join operator should have two children");
+        return RC::INVALID_ARGUMENT;
+    }
+
+    LogicalNode *left_oper = child_opers[0].get();
+    LogicalNode *right_oper = child_opers[1].get();
+
+    rc = create(*left_oper, left_physical_oper);
+    if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to create left physical operator. rc=%s", strrc(rc));
+        return rc;
+    }
+
+    rc = create(*right_oper, right_physical_oper);
+    if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to create right physical operator. rc=%s", strrc(rc));
+        return rc;
+    }
+
+    oper = unique_ptr<PhysicalOperator>(new JoinPhysicalOperator(std::move(join_oper.condition())));
+    oper->add_child(std::move(left_physical_oper));
+    oper->add_child(std::move(right_physical_oper));
+
+    return rc;
 }

@@ -7,20 +7,34 @@
 class JoinPhysicalOperator : public PhysicalOperator
 {
 public:
-  JoinPhysicalOperator();
-  ~JoinPhysicalOperator() override = default;
+    JoinPhysicalOperator(
+        std::unique_ptr<Expression> _condition
+    ) {
+        condition = std::move(_condition);
+    }
 
-  PhysicalOperatorType type() const override
-  {
-    return PhysicalOperatorType::JOIN;
-  }
+    ~JoinPhysicalOperator() override = default;
 
-  RC open(Trx *trx) override;
-  RC next() override;
-  RC close() override;
-  Tuple *current_tuple() override;
+    PhysicalOperatorType type() const override
+    {
+        return PhysicalOperatorType::JOIN;
+    }
+
+    RC open(Trx *trx) override;
+    RC next() override;
+    RC close() override;
+    Tuple *current_tuple() override;
+
+    RC filter(Tuple &tuple, bool &result);
 
 private:
-  Trx *trx_ = nullptr;
-  JoinedTuple joined_tuple_;  //! 当前关联的左右两个tuple
+    Trx *trx_ = nullptr;
+    JoinedTuple joined_tuple_;  //! 当前关联的左右两个tuple(current_tuple)
+
+    // std::vector<JoinedTuple> joined_tuples;  // 保存所有关联的tuple
+    std::unique_ptr<Expression> condition;
+    PhysicalOperator* left_ = nullptr;
+    PhysicalOperator* right_ = nullptr;
+
+    bool right_opened = false;
 };

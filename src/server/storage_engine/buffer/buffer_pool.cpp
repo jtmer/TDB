@@ -247,13 +247,8 @@ RC FileBufferPool::evict_page(PageNum page_num, Frame *buf)
             LOG_ERROR("Failed to evict page %s:%d, due to failed to flush page:%s.", file_name_.c_str(), page_num, strrc(rc));
             return rc;
         }
-    }
-    frame_manager_.evict_frames(1, [this, page_num](Frame *frame) {
-        if (frame->page_num() == page_num) {
-            return RC::SUCCESS;
-        }
-        return RC::INTERNAL;
-    });
+    }  
+    frame_manager_.evict_frame(buf);
     return RC::SUCCESS;
 }
 /**
@@ -261,7 +256,7 @@ RC FileBufferPool::evict_page(PageNum page_num, Frame *buf)
  */
 RC FileBufferPool::evict_all_pages()
 {
-    std::scoped_lock lock_guard(lock_);
+    // std::scoped_lock lock_guard(lock_);
     for (int i = 0; i < file_header_->page_count; i++) {
         Frame *frame = frame_manager_.get(file_desc_, i);
         if (frame != nullptr) {
