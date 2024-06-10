@@ -61,6 +61,8 @@ RC IndexScanPhysicalOperator::next()
     Record rec;
     RC rc = RC::RECORD_EOF;
     while (true) {
+        record_page_handler_.cleanup();
+
         RC _rc_ = index_scanner_->next_entry(&rid, isdelete_);
         if (_rc_ != RC::SUCCESS) {
             return _rc_;
